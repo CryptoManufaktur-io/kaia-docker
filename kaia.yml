@@ -1,0 +1,92 @@
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 100m
+      max-file: "3"
+      tag: '{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}'
+
+services:
+  kaia:
+    build:
+      context: ./kaia
+      dockerfile: Dockerfile.source
+      args:
+        - KEN_VERSION=${KEN_VERSION}
+        - USER=kaia
+    image: kaia:local
+    pull_policy: never
+    user: kaia
+    restart: unless-stopped
+    stop_grace_period: 5m
+    environment:
+      - NETWORK=${NETWORK}
+      - SNAPSHOT=${SNAPSHOT}
+      - PORT=${PORT:-32323}
+      - RPC_PORT=${RPC_PORT:-8551}
+      - WS_PORT=${WS_PORT:-8552}
+      - RPC_ADDR=${RPC_ADDR:-0.0.0.0}
+      - WS_ADDR=${WS_ADDR:-0.0.0.0}
+      - RPC_API=${RPC_API:-klay,eth,net,web3}
+      - WS_API=${WS_API:-klay,eth,net,web3}
+      - RPC_VHOSTS=${RPC_VHOSTS:-*}
+      - RPC_CORSDOMAIN=${RPC_CORSDOMAIN:-*}
+      - WS_ORIGINS=${WS_ORIGINS:-*}
+      - SYNCMODE=${SYNCMODE:-full}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - EXTRA_FLAGS=${EXTRA_FLAGS:-}
+    ports:
+      - ${PORT:-32323}:${PORT:-32323}/tcp    # P2P
+      - ${PORT:-32323}:${PORT:-32323}/udp    # P2P
+    <<: *logging
+    volumes:
+      - kaia-data:/kaia
+    entrypoint:
+      - docker-entrypoint.sh
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.${RPC_HOST}.service=${RPC_HOST}
+      - traefik.http.routers.${RPC_HOST}.entrypoints=websecure
+      - traefik.http.routers.${RPC_HOST}.rule=Host(`${RPC_HOST}.${DOMAIN}`)
+      - traefik.http.routers.${RPC_HOST}.tls.certresolver=letsencrypt
+      - traefik.http.routers.${RPC_HOST}lb.service=${RPC_HOST}
+      - traefik.http.routers.${RPC_HOST}lb.entrypoints=websecure
+      - traefik.http.routers.${RPC_HOST}lb.rule=Host(`${RPC_LB}.${DOMAIN}`)
+      - traefik.http.routers.${RPC_HOST}lb.tls.certresolver=letsencrypt
+      - traefik.http.services.${RPC_HOST}.loadbalancer.server.port=${RPC_PORT:-8551}
+      - traefik.http.routers.${WS_HOST:-kaiaws}.service=${WS_HOST:-kaiaws}
+      - traefik.http.routers.${WS_HOST:-kaiaws}.entrypoints=websecure
+      - traefik.http.routers.${WS_HOST:-kaiaws}.rule=Host(`${WS_HOST:-kaiaws}.${DOMAIN}`)
+      - traefik.http.routers.${WS_HOST:-kaiaws}.tls.certresolver=letsencrypt
+      - traefik.http.routers.${WS_HOST:-kaiaws}lb.service=${WS_HOST:-kaiaws}
+      - traefik.http.routers.${WS_HOST:-kaiaws}lb.entrypoints=websecure
+      - traefik.http.routers.${WS_HOST:-kaiaws}lb.rule=Host(`${WS_LB:-kaiaws-lb}.${DOMAIN}`)
+      - traefik.http.routers.${WS_HOST:-kaiaws}lb.tls.certresolver=letsencrypt
+      - traefik.http.services.${WS_HOST:-kaiaws}.loadbalancer.server.port=${WS_PORT:-8552}
+      - metrics.scrape=true
+      - metrics.path=/metrics
+      - metrics.port=61001
+      - metrics.instance=kaia
+      - metrics.network=${NETWORK}
+
+  cli:
+    profiles: ["tools"]
+    build:
+      context: ./kaia
+      dockerfile: Dockerfile.source
+      args:
+        - KEN_VERSION=${KEN_VERSION}
+        - USER=kaia
+    image: kaia:local
+    pull_policy: never
+    user: kaia
+    environment:
+      - NETWORK=${NETWORK}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - kaia-data:/kaia
+    entrypoint:
+      - ken
+
+volumes:
+  kaia-data:
