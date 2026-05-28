@@ -1,0 +1,94 @@
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 100m
+      max-file: "3"
+      tag: '{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}'
+
+services:
+  kaia:
+    image: kaiachain/kaia:${KAIA_TAG}
+    pull_policy: always
+    user: root
+    restart: unless-stopped
+    stop_grace_period: 10m
+    environment:
+      - NETWORK=${NETWORK:-mainnet}
+      - DATA_DIR=/var/kend/data
+      - LOG_DIR=/var/kend/logs
+      - CONF_DIR=/klaytn-docker-pkg/conf
+      - RPC_ENABLE=${RPC_ENABLE:-1}
+      - RPC_ADDR=${RPC_ADDR:-0.0.0.0}
+      - RPC_PORT=${RPC_PORT:-8551}
+      - RPC_API=${RPC_API:-eth,net,web3,klay,kaia,txpool,rpc}
+      - WS_ENABLE=${WS_ENABLE:-1}
+      - WS_ADDR=${WS_ADDR:-0.0.0.0}
+      - WS_PORT=${WS_PORT:-8552}
+      - WS_API=${WS_API:-eth,net,web3,klay,kaia,txpool,rpc}
+      - P2P_PORT=${P2P_PORT:-32323}
+      - PUBLIC_IP=${PUBLIC_IP:-}
+      - SYNCMODE=${SYNCMODE:-full}
+      - VERBOSITY=${VERBOSITY:-3}
+      - MAXCONNECTIONS=${MAXCONNECTIONS:-100}
+      - LDBCACHESIZE=${LDBCACHESIZE:-40960}
+      - SNAPSHOT=${SNAPSHOT:-}
+      - SNAPSHOT_STRIP_COMPONENTS=${SNAPSHOT_STRIP_COMPONENTS:-0}
+      - LIVE_PRUNING=${LIVE_PRUNING:-true}
+      - LIVE_PRUNING_RETENTION=${LIVE_PRUNING_RETENTION:-172800}
+      - EXTRA_FLAGS=${EXTRA_FLAGS:-}
+    ports:
+      - ${P2P_PORT:-32323}:${P2P_PORT:-32323}/tcp
+      - ${P2P_PORT:-32323}:${P2P_PORT:-32323}/udp
+    <<: *logging
+    volumes:
+      - kaia-data:/var/kend/data
+      - kaia-logs:/var/kend/logs
+      - kaia-conf:/klaytn-docker-pkg/conf
+      - ./kaia/docker-entrypoint.sh:/usr/local/bin/kaia-docker-entrypoint.sh:ro
+    entrypoint:
+      - /usr/local/bin/kaia-docker-entrypoint.sh
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.${RPC_HOST}.service=${RPC_HOST}
+      - traefik.http.routers.${RPC_HOST}.entrypoints=websecure
+      - traefik.http.routers.${RPC_HOST}.rule=Host(`${RPC_HOST}.${DOMAIN}`)
+      - traefik.http.routers.${RPC_HOST}.tls.certresolver=letsencrypt
+      - traefik.http.routers.${RPC_HOST}lb.service=${RPC_HOST}
+      - traefik.http.routers.${RPC_HOST}lb.entrypoints=websecure
+      - traefik.http.routers.${RPC_HOST}lb.rule=Host(`${RPC_LB}.${DOMAIN}`)
+      - traefik.http.routers.${RPC_HOST}lb.tls.certresolver=letsencrypt
+      - traefik.http.services.${RPC_HOST}.loadbalancer.server.port=${RPC_PORT:-8551}
+      - traefik.http.routers.${WS_HOST}.service=${WS_HOST}
+      - traefik.http.routers.${WS_HOST}.entrypoints=websecure
+      - traefik.http.routers.${WS_HOST}.rule=Host(`${WS_HOST}.${DOMAIN}`)
+      - traefik.http.routers.${WS_HOST}.tls.certresolver=letsencrypt
+      - traefik.http.routers.${WS_HOST}lb.service=${WS_HOST}
+      - traefik.http.routers.${WS_HOST}lb.entrypoints=websecure
+      - traefik.http.routers.${WS_HOST}lb.rule=Host(`${WS_LB}.${DOMAIN}`)
+      - traefik.http.routers.${WS_HOST}lb.tls.certresolver=letsencrypt
+      - traefik.http.services.${WS_HOST}.loadbalancer.server.port=${WS_PORT:-8552}
+      - metrics.scrape=true
+      - metrics.path=/metrics
+      - metrics.port=${RPC_PORT:-8551}
+      - metrics.instance=kaia
+      - metrics.network=${NETWORK:-mainnet}
+
+  cli:
+    profiles: ["tools"]
+    image: kaiachain/kaia:${KAIA_TAG}
+    pull_policy: always
+    user: root
+    environment:
+      - DATA_DIR=/var/kend/data
+    volumes:
+      - kaia-data:/var/kend/data
+      - kaia-logs:/var/kend/logs
+      - kaia-conf:/klaytn-docker-pkg/conf
+    entrypoint:
+      - ken
+
+volumes:
+  kaia-data:
+  kaia-logs:
+  kaia-conf:

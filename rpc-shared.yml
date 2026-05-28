@@ -1,0 +1,8 @@
+# Expose RPC and WebSocket ports on localhost
+# Usage: COMPOSE_FILE=kaia.yml:rpc-shared.yml in .env
+
+services:
+  kaia:
+    ports:
+      - ${RPC_PORT:-8551}:${RPC_PORT:-8551}/tcp    # HTTP JSON-RPC
+      - ${WS_PORT:-8552}:${WS_PORT:-8552}/tcp      # WebSocket

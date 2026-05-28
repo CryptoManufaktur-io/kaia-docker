@@ -1,0 +1,13 @@
+# External network configuration for Traefik integration
+# Usage: COMPOSE_FILE=kaia.yml:ext-network.yml in .env
+
+services:
+  kaia:
+    networks:
+      - default
+      - traefik
+
+networks:
+  traefik:
+    external: true
+    name: ${DOCKER_EXT_NETWORK}
