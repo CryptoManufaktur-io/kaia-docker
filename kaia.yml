@@ -8,11 +8,16 @@ x-logging: &logging
 
 services:
   kaia:
-    image: kaiachain/kaia:${KAIA_TAG}
+    build:
+      context: ./kaia
+      dockerfile: Dockerfile
+      args:
+        - KAIA_TAG=${KAIA_TAG}
+    image: kaia:local
     pull_policy: always
     user: root
     restart: unless-stopped
-    stop_grace_period: 10m
+    stop_grace_period: 2m
     environment:
       - NETWORK=${NETWORK:-mainnet}
       - DATA_DIR=/var/kend/data
@@ -45,7 +50,6 @@ services:
       - kaia-data:/var/kend/data
       - kaia-logs:/var/kend/logs
       - kaia-conf:/klaytn-docker-pkg/conf
-      - ./kaia/docker-entrypoint.sh:/usr/local/bin/kaia-docker-entrypoint.sh:ro
     entrypoint:
       - /usr/local/bin/kaia-docker-entrypoint.sh
     labels:
@@ -76,7 +80,12 @@ services:
 
   cli:
     profiles: ["tools"]
-    image: kaiachain/kaia:${KAIA_TAG}
+    build:
+      context: ./kaia
+      dockerfile: Dockerfile
+      args:
+        - KAIA_TAG=${KAIA_TAG}
+    image: kaia:local
     pull_policy: always
     user: root
     environment:

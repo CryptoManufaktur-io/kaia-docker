@@ -15,7 +15,7 @@ if [[ ! -f "${DATA_DIR}/.initialized" ]]; then
     if command -v aria2c >/dev/null 2>&1; then
       aria2c -x 16 -s 16 -k 1M --file-allocation=none --allow-overwrite=true -d /tmp -o kaia-snapshot.tar.gz "${SNAPSHOT}"
     else
-      curl -L "${SNAPSHOT}" -o "$tmp"
+      wget -O "$tmp" "${SNAPSHOT}"
     fi
     echo "Extracting snapshot into ${DATA_DIR}"
     if command -v pigz >/dev/null 2>&1; then
