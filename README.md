@@ -13,7 +13,6 @@ This project provides a production-ready Docker setup for running a Kaia Endpoin
 - EVM JSON-RPC and WebSocket endpoints
 - Prometheus metrics
 - Traefik integration for HTTPS
-- CCIP 1.5 deployment compatibility
 
 ## Network Information
 
@@ -32,7 +31,7 @@ cp default.env .env
 nano .env
 ```
 
-Update values and **IMPORTANTLY set SNAPSHOT** for faster sync (see below).
+**IMPORTANTLY set SNAPSHOT** for faster sync (see below).
 
 2. **Expose RPC ports locally** (optional):
 
@@ -52,7 +51,8 @@ COMPOSE_FILE=kaia.yml:rpc-shared.yml
 
 Start without a snapshot. The node will sync from block 0:
 ```bash
-# Leave SNAPSHOT empty in .env
+# In .env (default):
+SNAPSHOT=
 ./kaiad up
 ```
 
@@ -62,26 +62,32 @@ Start without a snapshot. The node will sync from block 0:
 
 Download and use a snapshot for much faster initial sync:
 
-**Full Node Snapshot** (recommended for most use cases):
+**Live-Pruning Snapshot** (RECOMMENDED for production):
 ```bash
-# In .env:
-SNAPSHOT=https://storage.googleapis.com/kaia-chaindata/mainnet/kaia-mainnet-chaindata-latest.tar.gz
+# In .env, set:
+SNAPSHOT=https://storage.googleapis.com/kaia-chaindata/mainnet/pruning-chaindata/kaia-mainnet-pruning-chaindata-latest.tar.gz
+LIVE_PRUNING=true
 ```
 
 **Snapshot Details**:
-- Size: ~1.9TB compressed / ~2.4TB uncompressed
+- Size: ~2.4TB compressed / ~2.9TB uncompressed
 - Update frequency: Daily
+- Disk efficient: Uses state pruning to reduce storage requirements
+- **IMPORTANT**: Requires `LIVE_PRUNING=true` in .env
 - Download time: 2-6 hours (depending on connection)
 - Extraction time: 1-3 hours
 - Total setup time: 3-9 hours vs 5-7 days
 
-The snapshot will be automatically downloaded, verified, and extracted on first startup.
+The snapshot will be automatically downloaded and extracted on first startup using aria2c (16 connections) and pigz (parallel decompression) for maximum speed.
 
-**Alternative: Live Pruning Snapshot** (smaller, for limited disk space):
+**Alternative: Full Archive Snapshot** (for nodes requiring complete state history):
 ```bash
-# In .env:
-SNAPSHOT=https://storage.googleapis.com/kaia-chaindata/mainnet/kaia-mainnet-pruning-chaindata-latest.tar.gz
+# In .env, set:
+SNAPSHOT=https://storage.googleapis.com/kaia-chaindata/mainnet/kaia-mainnet-chaindata-latest.tar.gz
+LIVE_PRUNING=false
 ```
+- Size: ~1.9TB compressed / ~2.4TB uncompressed
+- Keeps full state history (larger disk requirements)
 
 ## Commands
 
@@ -94,7 +100,7 @@ The `kaiad` script provides a convenient CLI for managing your node:
 - `./kaiad logs` - View and follow logs
 
 ### Maintenance
-- `./kaiad update` - Rebuild Docker image (e.g., after changing `KEN_VERSION`)
+- `./kaiad update` - Rebuild Docker image (e.g., after changing `KAIA_TAG`)
 - `./kaiad check-sync` - Check if node is synced with the network
 - `./kaiad ps` - Show service status
 
@@ -107,7 +113,7 @@ The `kaiad` script provides a convenient CLI for managing your node:
 
 To upgrade to a new ken version:
 
-1. Update `KEN_VERSION` in `.env` to the desired version tag (e.g., `v2.2.2`)
+1. Update `KAIA_TAG` in `.env` to the desired version tag (e.g., `v2.2.2`)
 2. Rebuild the Docker image:
 ```bash
 ./kaiad update
@@ -120,7 +126,7 @@ To upgrade to a new ken version:
 ./kaiad restart
 ```
 
-The ken binary is compiled from source during `docker compose build` in a multi-stage Dockerfile.
+Uses the official kaiachain/kaia Docker image from Docker Hub (no custom build required).
 
 ## Testing the RPC Endpoint
 
@@ -171,7 +177,7 @@ Default ports (configurable in `.env`):
 | JSON-RPC | 8551 | HTTP JSON-RPC endpoint |
 | WebSocket | 8552 | WebSocket endpoint |
 | P2P | 32323 | Peer-to-peer networking |
-| Prometheus | 61001 | Metrics endpoint |
+| Prometheus | 8551 | Metrics endpoint (via RPC) |
 
 ## Data Storage
 
@@ -188,26 +194,6 @@ docker volume inspect kaia-docker_kaia-data
 ./kaiad down
 docker run --rm -v kaia-docker_kaia-data:/data -v $(pwd):/backup \
   ubuntu tar czf /backup/kaia-backup.tar.gz /data
-```
-
-## Using with CCIP 1.5
-
-This RPC node is designed for use with Chainlink CCIP 1.5 deployments on Kaia.
-
-Configure your Chainlink node to use:
-- **HTTP RPC**: `http://localhost:8551`
-- **WebSocket**: `ws://localhost:8552`
-- **Chain ID**: `8217` (decimal) or `0x2019` (hex)
-
-## Monitoring
-
-Prometheus metrics are exposed on port 61001. Add to your Prometheus config:
-
-```yaml
-scrape_configs:
-  - job_name: 'kaia-node'
-    static_configs:
-      - targets: ['localhost:61001']
 ```
 
 ## Troubleshooting
@@ -234,17 +220,11 @@ docker volume rm kaia-docker_kaia-data
 ./kaiad up
 ```
 
-### Snapshot download is slow
-The entrypoint script uses `aria2c` if available for faster multi-connection downloads. If you experience slow downloads, you can:
-1. Download the snapshot manually to `/tmp/kaia-snapshot.tar.gz`
-2. Place it in the container before first start
-3. Or use a different mirror/CDN if available
-
 ## Hardware Requirements
 
 **Minimum**:
 - 8 CPU cores
-- 32 GB RAM
+- 64 GB RAM
 - 3 TB SSD storage (for full node)
 - 100 Mbps network
 

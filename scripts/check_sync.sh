@@ -67,14 +67,28 @@ fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --container) CONTAINER="$2"; shift 2 ;;
-    --compose-service) DOCKER_SERVICE="$2"; shift 2 ;;
-    --local-rpc) LOCAL_RPC="$2"; shift 2 ;;
-    --public-rpc) PUBLIC_RPC="$2"; shift 2 ;;
-    --block-lag) BLOCK_LAG_THRESHOLD="$2"; shift 2 ;;
-    --sample-secs) SAMPLE_SECS="$2"; shift 2 ;;
+    --container)
+      [[ -n "${2:-}" ]] || { echo "Error: --container requires a value"; exit 2; }
+      CONTAINER="$2"; shift 2 ;;
+    --compose-service)
+      [[ -n "${2:-}" ]] || { echo "Error: --compose-service requires a value"; exit 2; }
+      DOCKER_SERVICE="$2"; shift 2 ;;
+    --local-rpc)
+      [[ -n "${2:-}" ]] || { echo "Error: --local-rpc requires a value"; exit 2; }
+      LOCAL_RPC="$2"; shift 2 ;;
+    --public-rpc)
+      [[ -n "${2:-}" ]] || { echo "Error: --public-rpc requires a value"; exit 2; }
+      PUBLIC_RPC="$2"; shift 2 ;;
+    --block-lag)
+      [[ -n "${2:-}" ]] || { echo "Error: --block-lag requires a value"; exit 2; }
+      BLOCK_LAG_THRESHOLD="$2"; shift 2 ;;
+    --sample-secs)
+      [[ -n "${2:-}" ]] || { echo "Error: --sample-secs requires a value"; exit 2; }
+      SAMPLE_SECS="$2"; shift 2 ;;
     --no-install) INSTALL_TOOLS="0"; shift ;;
-    --env-file) ENV_FILE="$2"; shift 2 ;;
+    --env-file)
+      [[ -n "${2:-}" ]] || { echo "Error: --env-file requires a value"; exit 2; }
+      ENV_FILE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 2 ;;
   esac
@@ -128,6 +142,14 @@ jq_eval() {
   fi
 }
 
+jq_compact() {
+  if [[ -n "$CONTAINER" ]]; then
+    docker exec -i "$CONTAINER" jq -c "$1"
+  else
+    jq -c "$1"
+  fi
+}
+
 resolve_container
 
 if [[ -z "$PUBLIC_RPC" ]]; then
@@ -166,26 +188,23 @@ fi
 echo "==> Checking local ken eth_syncing status"
 
 syncing_json="$(rpc_post "$LOCAL_RPC" '{"jsonrpc":"2.0","method":"eth_syncing","params":[],"id":1}')"
-syncing_result="$(echo "$syncing_json" | jq_eval '.result | @json')"
+syncing_result="$(echo "$syncing_json" | jq_compact '.result')"
 
-# syncing_result here is a JSON-encoded string of result. Handle "false" and objects.
+# syncing_result here preserves JSON objects or boolean false. Handle both.
 if [[ -z "$syncing_result" || "$syncing_result" == "null" ]]; then
   echo "❌ Could not parse eth_syncing response. Raw response:"
   echo "$syncing_json"
   exit 5
 fi
 
-# Strip surrounding quotes if present (jq @json returns a JSON string)
-syncing_unquoted="$(printf '%s' "$syncing_result" | sed -e 's/^"//' -e 's/"$//')"
-
-if [[ "$syncing_unquoted" == "false" ]]; then
+if [[ "$syncing_result" == "false" ]]; then
   echo "eth_syncing: false (not actively syncing)"
 else
   echo "eth_syncing: true (actively syncing)"
   # Try to print common ken/geth fields if present
-  startingBlock="$(printf '%s' "$syncing_unquoted" | jq_eval '.startingBlock // empty' 2>/dev/null || true)"
-  currentBlock="$(printf '%s' "$syncing_unquoted"  | jq_eval '.currentBlock  // empty' 2>/dev/null || true)"
-  highestBlock="$(printf '%s' "$syncing_unquoted"  | jq_eval '.highestBlock  // empty' 2>/dev/null || true)"
+  startingBlock="$(echo "$syncing_result" | jq_eval '.startingBlock // empty' 2>/dev/null || true)"
+  currentBlock="$(echo "$syncing_result" | jq_eval '.currentBlock // empty' 2>/dev/null || true)"
+  highestBlock="$(echo "$syncing_result" | jq_eval '.highestBlock // empty' 2>/dev/null || true)"
 
   if [[ -n "${startingBlock:-}" || -n "${currentBlock:-}" || -n "${highestBlock:-}" ]]; then
     if [[ "${startingBlock:-}" == 0x* ]]; then startingBlock="$(hex_to_dec "$startingBlock")"; fi

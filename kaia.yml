@@ -8,41 +8,46 @@ x-logging: &logging
 
 services:
   kaia:
-    build:
-      context: ./kaia
-      dockerfile: Dockerfile.source
-      args:
-        - KEN_VERSION=${KEN_VERSION}
-        - USER=kaia
-    image: kaia:local
-    pull_policy: never
-    user: kaia
+    image: kaiachain/kaia:${KAIA_TAG}
+    pull_policy: always
+    user: root
     restart: unless-stopped
-    stop_grace_period: 5m
+    stop_grace_period: 10m
     environment:
-      - NETWORK=${NETWORK}
-      - SNAPSHOT=${SNAPSHOT}
-      - PORT=${PORT:-32323}
-      - RPC_PORT=${RPC_PORT:-8551}
-      - WS_PORT=${WS_PORT:-8552}
+      - NETWORK=${NETWORK:-mainnet}
+      - DATA_DIR=/var/kend/data
+      - LOG_DIR=/var/kend/logs
+      - CONF_DIR=/klaytn-docker-pkg/conf
+      - RPC_ENABLE=${RPC_ENABLE:-1}
       - RPC_ADDR=${RPC_ADDR:-0.0.0.0}
+      - RPC_PORT=${RPC_PORT:-8551}
+      - RPC_API=${RPC_API:-eth,net,web3,klay,kaia,txpool,rpc}
+      - WS_ENABLE=${WS_ENABLE:-1}
       - WS_ADDR=${WS_ADDR:-0.0.0.0}
-      - RPC_API=${RPC_API:-klay,eth,net,web3}
-      - WS_API=${WS_API:-klay,eth,net,web3}
-      - RPC_VHOSTS=${RPC_VHOSTS:-*}
-      - RPC_CORSDOMAIN=${RPC_CORSDOMAIN:-*}
-      - WS_ORIGINS=${WS_ORIGINS:-*}
+      - WS_PORT=${WS_PORT:-8552}
+      - WS_API=${WS_API:-eth,net,web3,klay,kaia,txpool,rpc}
+      - P2P_PORT=${P2P_PORT:-32323}
+      - PUBLIC_IP=${PUBLIC_IP:-}
       - SYNCMODE=${SYNCMODE:-full}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - VERBOSITY=${VERBOSITY:-3}
+      - MAXCONNECTIONS=${MAXCONNECTIONS:-100}
+      - LDBCACHESIZE=${LDBCACHESIZE:-40960}
+      - SNAPSHOT=${SNAPSHOT:-}
+      - SNAPSHOT_STRIP_COMPONENTS=${SNAPSHOT_STRIP_COMPONENTS:-0}
+      - LIVE_PRUNING=${LIVE_PRUNING:-true}
+      - LIVE_PRUNING_RETENTION=${LIVE_PRUNING_RETENTION:-172800}
       - EXTRA_FLAGS=${EXTRA_FLAGS:-}
     ports:
-      - ${PORT:-32323}:${PORT:-32323}/tcp    # P2P
-      - ${PORT:-32323}:${PORT:-32323}/udp    # P2P
+      - ${P2P_PORT:-32323}:${P2P_PORT:-32323}/tcp
+      - ${P2P_PORT:-32323}:${P2P_PORT:-32323}/udp
     <<: *logging
     volumes:
-      - kaia-data:/kaia
+      - kaia-data:/var/kend/data
+      - kaia-logs:/var/kend/logs
+      - kaia-conf:/klaytn-docker-pkg/conf
+      - ./kaia/docker-entrypoint.sh:/usr/local/bin/kaia-docker-entrypoint.sh:ro
     entrypoint:
-      - docker-entrypoint.sh
+      - /usr/local/bin/kaia-docker-entrypoint.sh
     labels:
       - traefik.enable=true
       - traefik.http.routers.${RPC_HOST}.service=${RPC_HOST}
@@ -54,39 +59,36 @@ services:
       - traefik.http.routers.${RPC_HOST}lb.rule=Host(`${RPC_LB}.${DOMAIN}`)
       - traefik.http.routers.${RPC_HOST}lb.tls.certresolver=letsencrypt
       - traefik.http.services.${RPC_HOST}.loadbalancer.server.port=${RPC_PORT:-8551}
-      - traefik.http.routers.${WS_HOST:-kaiaws}.service=${WS_HOST:-kaiaws}
-      - traefik.http.routers.${WS_HOST:-kaiaws}.entrypoints=websecure
-      - traefik.http.routers.${WS_HOST:-kaiaws}.rule=Host(`${WS_HOST:-kaiaws}.${DOMAIN}`)
-      - traefik.http.routers.${WS_HOST:-kaiaws}.tls.certresolver=letsencrypt
-      - traefik.http.routers.${WS_HOST:-kaiaws}lb.service=${WS_HOST:-kaiaws}
-      - traefik.http.routers.${WS_HOST:-kaiaws}lb.entrypoints=websecure
-      - traefik.http.routers.${WS_HOST:-kaiaws}lb.rule=Host(`${WS_LB:-kaiaws-lb}.${DOMAIN}`)
-      - traefik.http.routers.${WS_HOST:-kaiaws}lb.tls.certresolver=letsencrypt
-      - traefik.http.services.${WS_HOST:-kaiaws}.loadbalancer.server.port=${WS_PORT:-8552}
+      - traefik.http.routers.${WS_HOST}.service=${WS_HOST}
+      - traefik.http.routers.${WS_HOST}.entrypoints=websecure
+      - traefik.http.routers.${WS_HOST}.rule=Host(`${WS_HOST}.${DOMAIN}`)
+      - traefik.http.routers.${WS_HOST}.tls.certresolver=letsencrypt
+      - traefik.http.routers.${WS_HOST}lb.service=${WS_HOST}
+      - traefik.http.routers.${WS_HOST}lb.entrypoints=websecure
+      - traefik.http.routers.${WS_HOST}lb.rule=Host(`${WS_LB}.${DOMAIN}`)
+      - traefik.http.routers.${WS_HOST}lb.tls.certresolver=letsencrypt
+      - traefik.http.services.${WS_HOST}.loadbalancer.server.port=${WS_PORT:-8552}
       - metrics.scrape=true
       - metrics.path=/metrics
-      - metrics.port=61001
+      - metrics.port=${RPC_PORT:-8551}
       - metrics.instance=kaia
-      - metrics.network=${NETWORK}
+      - metrics.network=${NETWORK:-mainnet}
 
   cli:
     profiles: ["tools"]
-    build:
-      context: ./kaia
-      dockerfile: Dockerfile.source
-      args:
-        - KEN_VERSION=${KEN_VERSION}
-        - USER=kaia
-    image: kaia:local
-    pull_policy: never
-    user: kaia
+    image: kaiachain/kaia:${KAIA_TAG}
+    pull_policy: always
+    user: root
     environment:
-      - NETWORK=${NETWORK}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATA_DIR=/var/kend/data
     volumes:
-      - kaia-data:/kaia
+      - kaia-data:/var/kend/data
+      - kaia-logs:/var/kend/logs
+      - kaia-conf:/klaytn-docker-pkg/conf
     entrypoint:
       - ken
 
 volumes:
   kaia-data:
+  kaia-logs:
+  kaia-conf:

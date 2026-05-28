@@ -18,6 +18,9 @@ __old_docker=0
 __compose_exe="docker compose"
 __old_compose=0
 __compose_upgraded=0
+__compose_version=""
+__compose_major=0
+__compose_minor=0
 __distro=""
 __os_major_version=""
 __eol_os=0
@@ -36,8 +39,8 @@ version() {
 # Script version from README
   grep "^This is" README.md
   echo
-# Tempo client version from running container
-  __docompose exec kaia ken version
+# Kaia endpoint node version from running container
+  __docompose exec kaia ken version 2>/dev/null || echo "(Node not running)"
 }
 
 
@@ -1205,7 +1208,10 @@ case "$__command" in
   help|update|upgrade|run|up|start|down|stop|restart|version|logs|cmd|terminate|space)
     $__command "$@";;
   check-sync)
-    check_sync "$@";;
+    set +e
+    check_sync "$@"
+    exit "$?"
+    ;;
   *)
     echo "Unrecognized command $__command"
     help

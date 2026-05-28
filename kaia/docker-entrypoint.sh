@@ -1,144 +1,84 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
-# Kaia Endpoint Node (ken) Docker Entrypoint
-# This script initializes and starts a Kaia endpoint node
+DATA_DIR="${DATA_DIR:-/var/kend/data}"
+LOG_DIR="${LOG_DIR:-/var/kend/logs}"
+CONF_DIR="${CONF_DIR:-/klaytn-docker-pkg/conf}"
+CONF_FILE="${CONF_DIR}/kend.conf"
+mkdir -p "$DATA_DIR" "$LOG_DIR" "$CONF_DIR"
 
-# Required environment variables
-NETWORK="${NETWORK:-mainnet}"
-DATA_DIR="${DATA_DIR:-/kaia}"
-SNAPSHOT="${SNAPSHOT:-}"
-LOG_LEVEL="${LOG_LEVEL:-info}"
-
-# Port configuration
-PORT="${PORT:-32323}"
-RPC_PORT="${RPC_PORT:-8551}"
-WS_PORT="${WS_PORT:-8552}"
-RPC_ADDR="${RPC_ADDR:-0.0.0.0}"
-WS_ADDR="${WS_ADDR:-0.0.0.0}"
-
-# API configuration
-RPC_API="${RPC_API:-klay,eth,net,web3}"
-WS_API="${WS_API:-klay,eth,net,web3}"
-RPC_VHOSTS="${RPC_VHOSTS:-*}"
-RPC_CORSDOMAIN="${RPC_CORSDOMAIN:-*}"
-WS_ORIGINS="${WS_ORIGINS:-*}"
-
-# Sync mode: "full" or "snap"
-SYNCMODE="${SYNCMODE:-full}"
-
-# Additional flags
-EXTRA_FLAGS="${EXTRA_FLAGS:-}"
-
-# Initialization marker
-INIT_MARKER="${DATA_DIR}/.initialized"
-
-echo "=================================================="
-echo "Kaia Endpoint Node (ken) - Docker Entrypoint"
-echo "=================================================="
-echo "Network:   ${NETWORK}"
-echo "Data Dir:  ${DATA_DIR}"
-echo "Sync Mode: ${SYNCMODE}"
-echo "P2P Port:  ${PORT}"
-echo "RPC Port:  ${RPC_PORT}"
-echo "WS Port:   ${WS_PORT}"
-echo "=================================================="
-
-# Function to download and extract snapshot
-download_snapshot() {
-    local snapshot_url="$1"
-    local snapshot_file="/tmp/kaia-snapshot.tar.gz"
-
-    echo "==> Downloading snapshot: ${snapshot_url}"
-
-    # Use aria2c for faster multi-connection download if available
+if [[ ! -f "${DATA_DIR}/.initialized" ]]; then
+  echo "Initializing Kaia EN data directory"
+  if [[ -n "${SNAPSHOT:-}" ]]; then
+    echo "Downloading Kaia chaindata snapshot: ${SNAPSHOT}"
+    tmp="/tmp/kaia-snapshot.tar.gz"
     if command -v aria2c >/dev/null 2>&1; then
-        aria2c --file-allocation=none --max-connection-per-server=8 \
-               --split=8 --min-split-size=10M \
-               --continue=true --dir=/tmp --out=kaia-snapshot.tar.gz \
-               "${snapshot_url}"
+      aria2c -x 16 -s 16 -k 1M --file-allocation=none --allow-overwrite=true -d /tmp -o kaia-snapshot.tar.gz "${SNAPSHOT}"
     else
-        wget -c -O "${snapshot_file}" "${snapshot_url}"
+      curl -L "${SNAPSHOT}" -o "$tmp"
     fi
-
-    echo "==> Extracting snapshot to ${DATA_DIR}/data..."
-    mkdir -p "${DATA_DIR}/data"
-    tar -xzf "${snapshot_file}" -C "${DATA_DIR}/data" --strip-components=1
-
-    echo "==> Cleaning up snapshot file..."
-    rm -f "${snapshot_file}"
-
-    echo "==> Snapshot extracted successfully"
-}
-
-# First-time initialization
-if [ ! -f "${INIT_MARKER}" ]; then
-    echo "==> First-time initialization detected"
-
-    # Create data directory
-    mkdir -p "${DATA_DIR}/data" "${DATA_DIR}/logs"
-
-    # Download snapshot if specified
-    if [ -n "${SNAPSHOT}" ]; then
-        download_snapshot "${SNAPSHOT}"
+    echo "Extracting snapshot into ${DATA_DIR}"
+    if command -v pigz >/dev/null 2>&1; then
+      tar -I pigz --strip-components="${SNAPSHOT_STRIP_COMPONENTS:-0}" -xf "$tmp" -C "$DATA_DIR"
     else
-        echo "==> No snapshot specified. Node will sync from genesis (this will take several days)"
+      tar --strip-components="${SNAPSHOT_STRIP_COMPONENTS:-0}" -xzf "$tmp" -C "$DATA_DIR"
     fi
-
-    # Create initialization marker
-    touch "${INIT_MARKER}"
-    echo "==> Initialization complete"
+    rm -f "$tmp"
+  else
+    echo "No SNAPSHOT configured. Node will full-sync from genesis. This can take a long time."
+  fi
+  touch "${DATA_DIR}/.initialized"
 else
-    echo "==> Data directory already initialized"
+  echo "Already initialized!"
 fi
 
-# Build ken command
-KEN_CMD="ken"
-
-# Network configuration
-if [ "${NETWORK}" = "mainnet" ]; then
-    KEN_CMD="${KEN_CMD} --mainnet"
-elif [ "${NETWORK}" = "kairos" ]; then
-    KEN_CMD="${KEN_CMD} --kairos"
+if [[ -z "${PUBLIC_IP:-}" ]]; then
+  PUBLIC_IP="$(curl -fsS ifconfig.me/ip 2>/dev/null || true)"
 fi
 
-# Data directory
-KEN_CMD="${KEN_CMD} --datadir ${DATA_DIR}/data"
-
-# Sync mode
-KEN_CMD="${KEN_CMD} --syncmode ${SYNCMODE}"
-
-# P2P configuration
-KEN_CMD="${KEN_CMD} --port ${PORT}"
-KEN_CMD="${KEN_CMD} --maxconnections 100"
-
-# RPC configuration
-KEN_CMD="${KEN_CMD} --rpc --rpcport ${RPC_PORT}"
-KEN_CMD="${KEN_CMD} --rpcaddr ${RPC_ADDR}"
-KEN_CMD="${KEN_CMD} --rpcapi ${RPC_API}"
-KEN_CMD="${KEN_CMD} --rpcvhosts ${RPC_VHOSTS}"
-KEN_CMD="${KEN_CMD} --rpccorsdomain ${RPC_CORSDOMAIN}"
-
-# WebSocket configuration
-KEN_CMD="${KEN_CMD} --ws --wsport ${WS_PORT}"
-KEN_CMD="${KEN_CMD} --wsaddr ${WS_ADDR}"
-KEN_CMD="${KEN_CMD} --wsapi ${WS_API}"
-KEN_CMD="${KEN_CMD} --wsorigins ${WS_ORIGINS}"
-
-# Metrics (Prometheus)
-KEN_CMD="${KEN_CMD} --metrics --prometheus"
-
-# Logging
-KEN_CMD="${KEN_CMD} --verbosity 3"
-
-# Extra flags
-if [ -n "${EXTRA_FLAGS}" ]; then
-    KEN_CMD="${KEN_CMD} ${EXTRA_FLAGS}"
+ADDITIONAL_FLAGS="${EXTRA_FLAGS:-}"
+if [[ "${LIVE_PRUNING:-false}" == "true" ]]; then
+  ADDITIONAL_FLAGS="${ADDITIONAL_FLAGS} --state.live-pruning --state.live-pruning-retention ${LIVE_PRUNING_RETENTION:-172800}"
+fi
+if [[ -n "${PUBLIC_IP:-}" ]]; then
+  ADDITIONAL_FLAGS="${ADDITIONAL_FLAGS} --nat extip:${PUBLIC_IP}"
 fi
 
-echo "==> Starting Kaia Endpoint Node..."
-echo "==> Command: ${KEN_CMD}"
-echo "=================================================="
+cat > "$CONF_FILE" <<EOF_CONF
+# Generated by kaia-docker. Changes here are overwritten on container start.
+NETWORK="${NETWORK:-mainnet}"
+DATA_DIR="${DATA_DIR}"
+LOG_DIR="${LOG_DIR}"
+PORT=${P2P_PORT:-32323}
+SERVER_TYPE="fasthttp"
+SYNCMODE="${SYNCMODE:-full}"
+VERBOSITY=${VERBOSITY:-3}
+MAXCONNECTIONS=${MAXCONNECTIONS:-100}
+LDBCACHESIZE=${LDBCACHESIZE:-40960}
 
-# Execute ken
-exec ${KEN_CMD}
+RPC_ENABLE=${RPC_ENABLE:-1}
+RPC_ADDR="${RPC_ADDR:-0.0.0.0}"
+RPC_PORT=${RPC_PORT:-8551}
+RPC_API="${RPC_API:-eth,net,web3,klay,kaia,txpool,rpc}"
+RPC_CORSDOMAIN="*"
+RPC_VHOSTS="*"
+
+WS_ENABLE=${WS_ENABLE:-1}
+WS_ADDR="${WS_ADDR:-0.0.0.0}"
+WS_PORT=${WS_PORT:-8552}
+WS_API="${WS_API:-eth,net,web3,klay,kaia,txpool,rpc}"
+WS_ORIGINS="*"
+
+ADDITIONAL="${ADDITIONAL_FLAGS}"
+EOF_CONF
+
+chmod 0644 "$CONF_FILE"
+
+echo "Configuration complete!"
+echo "Starting Kaia endpoint node..."
+
+kend start
+
+touch "${LOG_DIR}/kend.out"
+trap 'echo "Stopping Kaia endpoint node"; kend stop; exit 0' TERM INT
+exec tail -F "${LOG_DIR}/kend.out"
