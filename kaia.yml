@@ -57,6 +57,7 @@ services:
       - /usr/local/bin/kaia-docker-entrypoint.sh
     labels:
       - traefik.enable=true
+      - traefik.docker.network=${DOCKER_EXT_NETWORK:-traefik_default}
       - traefik.http.routers.${RPC_HOST}.service=${RPC_HOST}
       - traefik.http.routers.${RPC_HOST}.entrypoints=websecure
       - traefik.http.routers.${RPC_HOST}.rule=Host(`${RPC_HOST}.${DOMAIN}`)
