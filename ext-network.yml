@@ -1,13 +1,12 @@
 # External network configuration for Traefik integration
 # Usage: COMPOSE_FILE=kaia.yml:ext-network.yml in .env
-
-services:
-  kaia:
-    networks:
-      - default
-      - traefik
+#
+# Make the external Traefik network the only network (the same pattern the other
+# *-docker repos use). With a second internal network, Prometheus docker service
+# discovery only matches the first network (match_first_network), which for kaia was
+# the internal one that Prometheus cannot reach, so the scrape was always up == 0.
 
 networks:
-  traefik:
+  default:
+    name: ${DOCKER_EXT_NETWORK:-traefik_default}
     external: true
-    name: ${DOCKER_EXT_NETWORK}
