@@ -40,6 +40,9 @@ ADDITIONAL_FLAGS="${EXTRA_FLAGS:-}"
 if [[ "${LIVE_PRUNING:-false}" == "true" ]]; then
   ADDITIONAL_FLAGS="${ADDITIONAL_FLAGS} --state.live-pruning --state.live-pruning-retention ${LIVE_PRUNING_RETENTION:-172800}"
 fi
+if [[ "${METRICS_ENABLE:-1}" == "1" ]]; then
+  ADDITIONAL_FLAGS="${ADDITIONAL_FLAGS} --metrics --prometheus --prometheusport ${METRICS_PORT:-61001}"
+fi
 if [[ -n "${PUBLIC_IP:-}" ]]; then
   ADDITIONAL_FLAGS="${ADDITIONAL_FLAGS} --nat extip:${PUBLIC_IP}"
 fi
