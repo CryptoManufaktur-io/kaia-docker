@@ -17,7 +17,7 @@ services:
     pull_policy: never
     user: root
     restart: unless-stopped
-    stop_grace_period: 2m
+    stop_grace_period: 3m
     environment:
       - NETWORK=${NETWORK:-mainnet}
       - DATA_DIR=/var/kend/data
@@ -36,6 +36,9 @@ services:
       - SYNCMODE=${SYNCMODE:-full}
       - VERBOSITY=${VERBOSITY:-3}
       - MAXCONNECTIONS=${MAXCONNECTIONS:-100}
+      - STOP_TIMEOUT=${STOP_TIMEOUT:-120}
+      - METRICS_ENABLE=${METRICS_ENABLE:-1}
+      - METRICS_PORT=${METRICS_PORT:-61001}
       - LDBCACHESIZE=${LDBCACHESIZE:-40960}
       - SNAPSHOT=${SNAPSHOT:-}
       - SNAPSHOT_STRIP_COMPONENTS=${SNAPSHOT_STRIP_COMPONENTS:-0}
@@ -74,7 +77,7 @@ services:
       - traefik.http.services.${WS_HOST}.loadbalancer.server.port=${WS_PORT:-8552}
       - metrics.scrape=true
       - metrics.path=/metrics
-      - metrics.port=${RPC_PORT:-8551}
+      - metrics.port=${METRICS_PORT:-61001}
       - metrics.instance=kaia
       - metrics.network=${NETWORK:-mainnet}
 

@@ -177,7 +177,7 @@ Default ports (configurable in `.env`):
 | JSON-RPC | 8551 | HTTP JSON-RPC endpoint |
 | WebSocket | 8552 | WebSocket endpoint |
 | P2P | 32323 | Peer-to-peer networking |
-| Prometheus | 8551 | Metrics endpoint (via RPC) |
+| Prometheus | 61001 | Metrics endpoint (`/metrics`, container-internal; not published) |
 
 ## Data Storage
 
