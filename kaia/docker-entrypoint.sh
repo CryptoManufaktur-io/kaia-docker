@@ -55,6 +55,7 @@ SYNCMODE="${SYNCMODE:-full}"
 VERBOSITY=${VERBOSITY:-3}
 MAXCONNECTIONS=${MAXCONNECTIONS:-100}
 LDBCACHESIZE=${LDBCACHESIZE:-40960}
+STOP_TIMEOUT=${STOP_TIMEOUT:-120}
 
 RPC_ENABLE=${RPC_ENABLE:-1}
 RPC_ADDR="${RPC_ADDR:-0.0.0.0}"
@@ -80,5 +81,19 @@ echo "Starting Kaia endpoint node..."
 kend start
 
 touch "${LOG_DIR}/kend.out"
-trap 'echo "Stopping Kaia endpoint node"; kend stop; exit 0' TERM INT
-exec tail -F "${LOG_DIR}/kend.out"
+
+# Do not `exec tail`: exec discards the trap and leaves tail as PID 1, which ignores
+# SIGTERM. Docker then waits out stop_grace_period and SIGKILLs ken, leaving an unclean
+# database ("Head state missing, repairing chain") and a multi-day catch-up.
+tail -F "${LOG_DIR}/kend.out" &
+tail_pid=$!
+
+shutdown() {
+  echo "Stopping Kaia endpoint node"
+  kend stop
+  kill "${tail_pid}" 2>/dev/null || true
+  exit 0
+}
+trap shutdown TERM INT
+
+wait "${tail_pid}"

@@ -17,7 +17,7 @@ services:
     pull_policy: never
     user: root
     restart: unless-stopped
-    stop_grace_period: 2m
+    stop_grace_period: 3m
     environment:
       - NETWORK=${NETWORK:-mainnet}
       - DATA_DIR=/var/kend/data
@@ -36,6 +36,7 @@ services:
       - SYNCMODE=${SYNCMODE:-full}
       - VERBOSITY=${VERBOSITY:-3}
       - MAXCONNECTIONS=${MAXCONNECTIONS:-100}
+      - STOP_TIMEOUT=${STOP_TIMEOUT:-120}
       - LDBCACHESIZE=${LDBCACHESIZE:-40960}
       - SNAPSHOT=${SNAPSHOT:-}
       - SNAPSHOT_STRIP_COMPONENTS=${SNAPSHOT_STRIP_COMPONENTS:-0}
