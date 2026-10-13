@@ -2,6 +2,9 @@
 .env
 .env.source
 .env.tmp
+.env.bak
+.env.bak-*
+.env.save
 
 # Docker volumes
 data/
